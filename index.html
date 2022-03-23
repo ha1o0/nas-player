@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>play</title>
+  <style>
+    ::-webkit-scrollbar {
+      display: none; /* Chrome Safari */
+    }
+    body {
+      padding: 0 10px;
+      margin: 0;
+    }
+    #nav {
+      position: sticky;
+      top: 0;
+      width: 100%;
+      background: white;
+      padding: 3px 0;
+    }
+    #dplayer-container {
+      width: calc(100% - 150px);
+      height: calc(100% - 40px);
+      position: fixed;
+      top: 40px;
+      left: 160px;
+      background: rgba(0, 0, 0, 0.3);
+      display: none;
+    }
+    #dplayer {
+      position: absolute;
+      top: 0%;
+      left: 0%;
+      width: 100%;
+      height: 100%;
+    }
+    #mkv-player {
+      display: none;
+    }
+    .item {
+      padding: 5px;
+      text-align: left;
+      max-width: 145px;
+      word-break: break-all;
+      color: white;
+      border: 0;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: medium;
+      margin-bottom: 5px;
+    }
+    .folder {
+      background: coral;
+    }
+    .media {
+      background: cornflowerblue;
+    }
+    .menu {
+      background: dimgray;
+    }
+  </style>
+</head>
+<body>
+  <script src="https://cdn.bootcdn.net/ajax/libs/axios/0.26.1/axios.min.js"></script>
+  <script src="./lib/pinyin4js.js"></script>
+  <script src="./lib/mpegts.js"></script>
+  <script src="./lib/flv.min.js"></script>
+  <script src="./lib/hls.min.js"></script>
+  <script src="./lib/DPlayer.min.js"></script>
+  <div class="container">
+    <div id="nav" class="nav">
+      <button class="item menu" onclick="back()">上一级</button>
+      <span id="current-play"></span>
+    </div>
+    <div id="tree" class="tree"></div>
+    <div id="dplayer-container">
+      <div id="dplayer"></div>
+    </div>
+  </div>
+  <script>
+    const domain = window.location.origin
+    const data = {}
+    let dp = null
+    let mkvPlayer = null
+    let mkvPlayerSource = null
+    let dplayerContainer = null
+    let tree = []
+    let pathStack = []
+    let videos = []
+    let currentPlayingVideoIndex = 0
+    let currentPlay = ''
+    let auth = {
+      username: 'xxx',
+      password: 'xxx'
+    }
+    const treeElement = document.getElementById('tree')
+    initData()
+
+    function initData() {
+      Object.defineProperty(data, 'tree', {
+        get() {
+          return tree
+        },
+        set(newValue) {
+          tree = newValue
+          renderTree()
+        }
+      })
+      Object.defineProperty(data, 'currentPlay', {
+        get() {
+          return currentPlay
+        },
+        set(newValue) {
+          currentPlay = newValue
+          updateCurrentPlay()
+        }
+      })
+      getFileByPath()
+      initPlayer()
+    }
+
+    function initPlayer() {
+      dplayer = document.getElementById('dplayer')
+      dplayerContainer = document.getElementById('dplayer-container')
+      dplayerContainer.onclick = (e) => {
+        e.stopPropagation()
+        dplayerContainer.style.display = 'none'
+        dp.pause()
+      }
+      dplayer.onclick = (e) => {
+        e.stopPropagation()
+      }
+    }
+
+    function playVideo(url) {
+      initPlayer()
+      const customTypes = ['flv', 'hls', 'm3u8', 'ts']
+      let videoType = url.substring(url.lastIndexOf('.') + 1)
+      let isCustomType = customTypes.indexOf(videoType) > -1
+      if (isCustomType) {
+        videoType = `custom${videoType[0].toUpperCase() + videoType.substr(1) }`
+      }
+      dp = new DPlayer({
+        container: dplayer,
+        video: {
+          url,
+          defaultQuality: 10,
+          type: videoType,
+          customType: {
+            customFlv: (video, player) => {
+              const flvPlayer = mpegts.createPlayer({
+                  type: 'flv',
+                  url,
+              })
+              flvPlayer.attachMediaElement(video)
+              flvPlayer.load()
+              flvPlayer.play()
+            },
+            customHls: (video, player) => {
+              const hls = new Hls()
+              hls.loadSource(video.src)
+              hls.attachMedia(video)
+            },
+            customTs: (video, player) => {
+              const tsPlayer = mpegts.createPlayer({
+                  type: 'mpegts',  // could also be mpegts, m2ts, flv
+                  isLive: false,
+                  lazyLoadMaxDuration: 3 * 60,
+                  seekType: 'range',
+                  url,
+              })
+              tsPlayer.attachMediaElement(video)
+              tsPlayer.load()
+              tsPlayer.play()
+            },
+            customM3u8: (video, player) => {
+              const hls = new Hls()
+              hls.loadSource(video.src)
+              hls.attachMedia(video)
+            },
+            customRmvb: (video, player) => {
+              const flvPlayer = flvjs.createPlayer({
+                type: 'flv',
+                url,
+              })
+              flvPlayer.attachMediaElement(video)
+              flvPlayer.load()
+            },
+          }
+        },
+      })
+      if (isCustomType) {
+        return
+      }
+      dp.on('ended',() => {
+        playNext()
+      })
+      dp.switchVideo({url})
+      dp.play()
+    }
+
+    function playNext() {
+      currentPlayingVideoIndex += 1
+      if (currentPlayingVideoIndex < videos.length) {
+        const url = getFullPath(getTargetPath() + videos[currentPlayingVideoIndex].substring(1))
+        data.currentPlay = url
+        playVideo(url)
+      }
+    }
+
+    function back() {
+      pathStack.pop()
+      getFileByPath(getTargetPath())
+    }
+
+    function getTargetPath() {
+      if (!pathStack.length) {
+        return ''
+      }
+      return pathStack.reduce((previousValue, currentValue) => previousValue + currentValue)
+    }
+
+    function renderTree() {
+      window.scrollTo(0, 0)
+      treeElement.innerHTML = ''
+      data.tree.forEach(element => {
+        const newChild = document.createElement('div')
+        const buttonElement = document.createElement('button')
+        buttonElement.value = element.name
+        buttonElement.innerText = element.name
+        buttonElement.className = 'item'
+        buttonElement.classList.add(isFolder(element.name) ? 'folder' : 'media')
+        buttonElement.onclick = (e) => {
+          const elemPath = e.target.value
+          if (elemPath[elemPath.length - 1] === '/') {
+            pathStack.push(elemPath)
+            getFileByPath(getTargetPath())
+          } else {
+            // 播放媒体
+            currentPlayingVideoIndex = videos.indexOf(elemPath)
+            dplayerContainer.style.display = 'block'
+            const url = getFullPath(getTargetPath() + elemPath.substring(1))
+            data.currentPlay = url
+            playVideo(url)
+          }
+
+        }
+
+        newChild.appendChild(buttonElement)
+        treeElement.appendChild(newChild)
+      });
+    }
+
+    function updateCurrentPlay() {
+      const currentPlayElement = document.getElementById('current-play')
+      currentPlayElement.innerText = '正在播放：' + data.currentPlay
+      currentPlayElement.style.color = 'yellowgreen'
+    }
+
+    function parseResp(resp) {
+      const div = document.createElement('div')
+      div.innerHTML = resp.data;
+      const preLabels = div.getElementsByTagName('pre')
+      if (!preLabels.length) {
+        return
+      }
+      const preLabel = preLabels[0]
+      const fileItems = Array.from(preLabel.children)
+      let newTree = []
+      let newVideos = []
+      for (let index = 0; index < fileItems.length; index++) {
+        const item = fileItems[index];
+        const itemPath = decodeURI(isFolder(item.text) ? item.text : item.href.substring(item.href.lastIndexOf('/')))
+        if (itemPath === '../' || itemPath === '/') {
+          continue
+        }
+        if (!isFolder(item.text)) {
+          newVideos.push(itemPath)
+        }
+        newTree.push({
+          name: itemPath,
+          type: ''
+        })
+      }
+      newTree.sort((a, b) => {
+        const aIsFolder = isFolder(a.name)
+        const bIsFolder = isFolder(b.name)
+        if (aIsFolder !== bIsFolder) {
+          return bIsFolder - aIsFolder
+        }
+        const an = a.name.replace(/[^0-9]/ig, '')
+        const bn = b.name.replace(/[^0-9]/ig, '')
+        return an - bn
+        // const astr = PinyinHelper.convertToPinyinString(a.name, '', PinyinFormat.FIRST_LETTER)
+        // const bstr = PinyinHelper.convertToPinyinString(b.name, '', PinyinFormat.FIRST_LETTER)
+        // return astr < bstr ? -1 : 1
+      })
+      videos = newVideos
+      videos.sort()
+      data.tree = newTree
+    }
+
+    function getFullPath(path = '') {
+      return domain + '/video/' + path
+    }
+
+    function getFileByPath(path = '') {
+      let authConfig = path === 'set/' ? { auth } : {}
+      axios.get(getFullPath(path), authConfig)
+      .then(function (response) {
+        parseResp(response)
+      })
+      .catch(function (error) {
+        console.log(error)
+      })
+      .then(function () {
+      });
+    }
+
+    function isFolder(path) {
+      return path.lastIndexOf('/') === path.length - 1
+    }
+
+  </script>
+</body>
+</html>
