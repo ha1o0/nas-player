@@ -17,8 +17,28 @@
       position: sticky;
       top: 0;
       width: 100%;
+      height: 40px;
       background: white;
       padding: 3px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #current-play-container {
+      display: inline-block;
+      box-sizing: border-box;
+      padding-left: 8px;
+      width: calc(100% - 140px);
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    #current-play {
+      display: inline-block;
+      width: 100%;
+      white-space: nowrap;
+    }
+    .text-scroll {
+      animation: 15s wordsLoop linear infinite normal;
     }
     #dplayer-container {
       width: calc(100% - 150px);
@@ -28,6 +48,10 @@
       left: 160px;
       background: rgba(0, 0, 0, 0.3);
       display: none;
+    }
+    .expand-dplayer-container {
+      width: 100% !important;
+      left: 0 !important;
     }
     #dplayer {
       position: absolute;
@@ -59,6 +83,32 @@
     }
     .menu {
       background: dimgray;
+      width: 60px;
+      text-align: center;
+    }
+    @keyframes wordsLoop {
+      0% {
+        transform: translateX(0px);
+        -webkit-transform: translateX(0px);
+      }
+      100% {
+        transform: translateX(-100%);
+        -webkit-transform: translateX(-100%);
+      }
+    }
+
+    @-webkit-keyframes wordsLoop {
+      0% {
+        transform: translateX(0px);
+        -webkit-transform: translateX(0px);
+      }
+      100% {
+        transform: translateX(-100%);
+        -webkit-transform: translateX(-100%);
+      }
+    }
+    #text-test {
+      display: none;
     }
   </style>
 </head>
@@ -72,16 +122,21 @@
   <div class="container">
     <div id="nav" class="nav">
       <button class="item menu" onclick="back()">上一级</button>
-      <span id="current-play"></span>
+      <button id="fold" class="item menu fold" onclick="foldOrExpand()">收起</button>
+      <div id="current-play-container"><span id="current-play"></span></div>
     </div>
     <div id="tree" class="tree"></div>
     <div id="dplayer-container">
       <div id="dplayer"></div>
     </div>
+    <div id="text-test"></div>
   </div>
   <script>
     const domain = window.location.origin
     const data = {}
+    let isFold = false
+    const widths = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.2796875,0.2765625,0.3546875,0.5546875,0.5546875,0.8890625,0.665625,0.190625,0.3328125,0.3328125,0.3890625,0.5828125,0.2765625,0.3328125,0.2765625,0.3015625,0.5546875,0.5546875,0.5546875,0.5546875,0.5546875,0.5546875,0.5546875,0.5546875,0.5546875,0.5546875,0.2765625,0.2765625,0.584375,0.5828125,0.584375,0.5546875,1.0140625,0.665625,0.665625,0.721875,0.721875,0.665625,0.609375,0.7765625,0.721875,0.2765625,0.5,0.665625,0.5546875,0.8328125,0.721875,0.7765625,0.665625,0.7765625,0.721875,0.665625,0.609375,0.721875,0.665625,0.94375,0.665625,0.665625,0.609375,0.2765625,0.3546875,0.2765625,0.4765625,0.5546875,0.3328125,0.5546875,0.5546875,0.5,0.5546875,0.5546875,0.2765625,0.5546875,0.5546875,0.221875,0.240625,0.5,0.221875,0.8328125,0.5546875,0.5546875,0.5546875,0.5546875,0.3328125,0.5,0.2765625,0.5546875,0.5,0.721875,0.5,0.5,0.5,0.3546875,0.259375,0.353125,0.5890625]
+    const avg = 0.5279276315789471
     let dp = null
     let mkvPlayer = null
     let mkvPlayerSource = null
@@ -210,6 +265,14 @@
       }
     }
 
+    function foldOrExpand() {
+      isFold = !isFold
+      treeElement.style.display = isFold ? 'none' : 'block'
+      dplayerContainer.className = isFold ? 'expand-dplayer-container' : ''
+      const foldBtn = document.getElementById('fold')
+      foldBtn.innerText = isFold ? '展开' : '收起'
+    }
+
     function back() {
       pathStack.pop()
       getFileByPath(getTargetPath())
@@ -253,10 +316,19 @@
       });
     }
 
+    function measureText(str, fontSize) {
+      return Array.from(str).reduce(
+        (acc, cur) => acc + (widths[cur.charCodeAt(0)] ?? avg), 0
+      ) * fontSize
+    }
+
     function updateCurrentPlay() {
+      const video = '正在播放：' + data.currentPlay
       const currentPlayElement = document.getElementById('current-play')
-      currentPlayElement.innerText = '正在播放：' + data.currentPlay
+      currentPlayElement.innerText = video
       currentPlayElement.style.color = 'yellowgreen'
+      console.log(currentPlayElement.clientWidth, measureText(video, 16))
+      currentPlayElement.className = currentPlayElement.clientWidth >= measureText(video, 16) ? '' : 'text-scroll'
     }
 
     function parseResp(resp) {
