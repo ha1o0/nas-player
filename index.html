@@ -24,11 +24,19 @@
       justify-content: space-between;
       align-items: center;
     }
+    #menu-button-group {
+      display: flex;
+      width: 140px;
+      justify-content: space-between;
+      align-items: center;
+    }
     #current-play-container {
-      display: inline-block;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       box-sizing: border-box;
       padding-left: 8px;
-      width: calc(100% - 140px);
+      width: calc(100% - 280px);
       white-space: nowrap;
       overflow: hidden;
     }
@@ -36,6 +44,12 @@
       display: inline-block;
       width: 100%;
       white-space: nowrap;
+    }
+    #play-button-group {
+      display: flex;
+      width: 140px;
+      justify-content: space-between;
+      align-items: center;
     }
     .text-scroll {
       animation: 15s wordsLoop linear infinite normal;
@@ -81,10 +95,14 @@
     .media {
       background: cornflowerblue;
     }
+    .media-playing {
+      background: orangered;
+    }
     .menu {
       background: dimgray;
       width: 60px;
       text-align: center;
+      user-select: none;
     }
     @keyframes wordsLoop {
       0% {
@@ -121,15 +139,22 @@
   <script src="./lib/DPlayer.min.js"></script>
   <div class="container">
     <div id="nav" class="nav">
-      <button class="item menu" onclick="back()">上一级</button>
-      <button id="fold" class="item menu fold" onclick="foldOrExpand()">收起</button>
-      <div id="current-play-container"><span id="current-play"></span></div>
+      <div id="menu-button-group">
+        <button class="item menu" onclick="back()">上一级</button>
+        <button id="fold" class="item menu fold" onclick="foldOrExpand()">收起</button>
+      </div>
+      <div id="current-play-container">
+        <span id="current-play"></span>
+      </div>
+      <div id="play-button-group" class="play-button-group">
+        <button id="play-last" class="item menu" onclick="playLast()">上一个</button>
+        <button id="play-next" class="item menu" onclick="playNext()">下一个</button>
+      </div>
     </div>
     <div id="tree" class="tree"></div>
     <div id="dplayer-container">
       <div id="dplayer"></div>
     </div>
-    <div id="text-test"></div>
   </div>
   <script>
     const domain = window.location.origin
@@ -153,7 +178,7 @@
     const treeElement = document.getElementById('tree')
     initData()
 
-    function initData() {
+    async function initData() {
       Object.defineProperty(data, 'tree', {
         get() {
           return tree
@@ -172,7 +197,7 @@
           updateCurrentPlay()
         }
       })
-      getFileByPath()
+      await getFileByPath()
       initPlayer()
     }
 
@@ -256,13 +281,23 @@
       dp.play()
     }
 
+    function play(index) {
+      if (currentPlayingVideoIndex >= videos.length) {
+        return
+      }
+      const url = getFullPath(getTargetPath() + videos[currentPlayingVideoIndex].substring(1))
+      data.currentPlay = url
+      playVideo(url)
+    }
+
+    function playLast() {
+      currentPlayingVideoIndex -= 1
+      play(currentPlayingVideoIndex)
+    }
+
     function playNext() {
       currentPlayingVideoIndex += 1
-      if (currentPlayingVideoIndex < videos.length) {
-        const url = getFullPath(getTargetPath() + videos[currentPlayingVideoIndex].substring(1))
-        data.currentPlay = url
-        playVideo(url)
-      }
+      play(currentPlayingVideoIndex)
     }
 
     function foldOrExpand() {
@@ -273,9 +308,9 @@
       foldBtn.innerText = isFold ? '展开' : '收起'
     }
 
-    function back() {
+    async function back() {
       pathStack.pop()
-      getFileByPath(getTargetPath())
+      await getFileByPath(getTargetPath())
     }
 
     function getTargetPath() {
@@ -295,11 +330,11 @@
         buttonElement.innerText = element.name
         buttonElement.className = 'item'
         buttonElement.classList.add(isFolder(element.name) ? 'folder' : 'media')
-        buttonElement.onclick = (e) => {
+        buttonElement.onclick = async (e) => {
           const elemPath = e.target.value
           if (elemPath[elemPath.length - 1] === '/') {
             pathStack.push(elemPath)
-            getFileByPath(getTargetPath())
+            await getFileByPath(getTargetPath())
           } else {
             // 播放媒体
             currentPlayingVideoIndex = videos.indexOf(elemPath)
@@ -308,11 +343,11 @@
             data.currentPlay = url
             playVideo(url)
           }
-
         }
 
         newChild.appendChild(buttonElement)
         treeElement.appendChild(newChild)
+        updateCurrentPlayItem()
       });
     }
 
@@ -327,8 +362,20 @@
       const currentPlayElement = document.getElementById('current-play')
       currentPlayElement.innerText = video
       currentPlayElement.style.color = 'yellowgreen'
-      console.log(currentPlayElement.clientWidth, measureText(video, 16))
       currentPlayElement.className = currentPlayElement.clientWidth >= measureText(video, 16) ? '' : 'text-scroll'
+      updateCurrentPlayItem()
+    }
+
+    function updateCurrentPlayItem() {
+      const currentItems = Array.from(document.getElementsByClassName("item media"))
+      const currentPlayingItems = Array.from(document.getElementsByClassName("item media-playing"))
+      const items = [...currentItems, ...currentPlayingItems]
+      items.forEach((item) => {
+        const itemValue = item.value
+        const currentItemUrl = getFullPath(getTargetPath() + itemValue.substring(1))
+        const isCurrent = currentItemUrl === data.currentPlay
+        item.className = `item ${isCurrent ? 'media-playing' : 'media'}`
+      })
     }
 
     function parseResp(resp) {
@@ -378,7 +425,7 @@
       return domain + '/video/' + path
     }
 
-    function getFileByPath(path = '') {
+    async function getFileByPath(path = '') {
       let authConfig = path === 'set/' ? { auth } : {}
       axios.get(getFullPath(path), authConfig)
       .then(function (response) {
