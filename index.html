@@ -226,7 +226,6 @@
         container: dplayer,
         video: {
           url,
-          defaultQuality: 10,
           type: videoType,
           customType: {
             customFlv: (video, player) => {
@@ -395,9 +394,6 @@
         if (itemPath === '../' || itemPath === '/') {
           continue
         }
-        if (!isFolder(item.text)) {
-          newVideos.push(itemPath)
-        }
         newTree.push({
           name: itemPath,
           type: ''
@@ -416,8 +412,12 @@
         // const bstr = PinyinHelper.convertToPinyinString(b.name, '', PinyinFormat.FIRST_LETTER)
         // return astr < bstr ? -1 : 1
       })
+      newTree.forEach((item) => {
+        if (!isFolder(item.name)) {
+          newVideos.push(item.name)
+        }
+      })
       videos = newVideos
-      videos.sort()
       data.tree = newTree
     }
 
