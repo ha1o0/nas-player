@@ -390,8 +390,8 @@
       let newVideos = []
       for (let index = 0; index < fileItems.length; index++) {
         const item = fileItems[index];
-        const itemPath = decodeURI(isFolder(item.text) ? item.text : item.href.substring(item.href.lastIndexOf('/')))
-        if (itemPath === '../' || itemPath === '/') {
+        const itemPath = decodeURIComponent(isFolder(item.pathname) ? item.pathname.substring(6) : item.href.substring(item.href.lastIndexOf('/')))
+        if (itemPath === '../' || itemPath === '/' || !itemPath) {
           continue
         }
         newTree.push({
@@ -439,7 +439,7 @@
     }
 
     function isFolder(path) {
-      return path.lastIndexOf('/') === path.length - 1
+      return path.endsWith("/")
     }
 
   </script>
